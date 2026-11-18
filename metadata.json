@@ -1,0 +1,6 @@
+{
+  "name": "HCN Support",
+  "description": "Ứng dụng quản lý ticket hỗ trợ kỹ thuật phân quyền theo vai trò, theo dõi 4 trạng thái, đối soát ảnh trước/sau, thông báo thời gian thực và báo cáo thống kê tuần.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

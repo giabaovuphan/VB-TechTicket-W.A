@@ -1,0 +1,615 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailId(emailId) {
+      return emailId is string &&
+             emailId.size() >= 3 &&
+             emailId.size() <= 150 &&
+             emailId.matches('^[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}$');
+    }
+
+    function isValidAssignedRole(role) {
+      return role in ['USER', 'TECHNICIAN', 'TEAM_LEAD', 'ADMIN'];
+    }
+
+    function isValidUserRoleField(role) {
+      return role in ['PENDING', 'USER', 'TECHNICIAN', 'TEAM_LEAD', 'ADMIN'];
+    }
+
+    function isValidApprovalStatus(st) {
+      return st in ['PENDING', 'APPROVED', 'REJECTED'];
+    }
+
+    function isValidPriority(priority) {
+      return priority in ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+    }
+
+    function isValidStatus(status) {
+      return status in ['OPEN', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED'];
+    }
+
+    function isRootAdminEmailValue(email) {
+      return email is string && email.lower() == 'giabao.vuphan@gmail.com';
+    }
+
+    function isBootstrapAdminEmail() {
+      return isSignedIn() &&
+             ('email_verified' in request.auth.token) &&
+             request.auth.token.email_verified == true &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email is string &&
+             request.auth.token.email.lower() == 'giabao.vuphan@gmail.com';
+    }
+
+    function userDocExists(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    function isApprovedUserDoc(data) {
+      return data.active == true &&
+             data.role in ['USER', 'TECHNICIAN', 'TEAM_LEAD', 'ADMIN'] &&
+             (!('approvalStatus' in data) || data.approvalStatus == 'APPROVED');
+    }
+
+    function isApprovedRoleDoc(data, roles) {
+      return data.active == true &&
+             data.role in roles &&
+             (!('approvalStatus' in data) || data.approvalStatus == 'APPROVED');
+    }
+
+    function isApprovedActiveUser() {
+      return isSignedIn() && (
+        isBootstrapAdminEmail() ||
+        (userDocExists(request.auth.uid) && isApprovedUserDoc(userDoc(request.auth.uid)))
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrapAdminEmail() ||
+        (userDocExists(request.auth.uid) &&
+         isApprovedRoleDoc(userDoc(request.auth.uid), ['ADMIN']))
+      );
+    }
+
+    function isTeamLeadOrAdmin() {
+      return isSignedIn() && (
+        isBootstrapAdminEmail() ||
+        (userDocExists(request.auth.uid) &&
+         isApprovedRoleDoc(userDoc(request.auth.uid), ['TEAM_LEAD', 'ADMIN']))
+      );
+    }
+
+    function isTechnician() {
+      return isSignedIn() &&
+             userDocExists(request.auth.uid) &&
+             isApprovedRoleDoc(userDoc(request.auth.uid), ['TECHNICIAN']);
+    }
+
+    function isStaffRole() {
+      return isSignedIn() && (
+        isBootstrapAdminEmail() ||
+        (userDocExists(request.auth.uid) &&
+         isApprovedRoleDoc(userDoc(request.auth.uid), ['TECHNICIAN', 'TEAM_LEAD', 'ADMIN']))
+      );
+    }
+
+    function hasMatchingRoleAssignment(role) {
+      return isSignedIn() &&
+             isValidAssignedRole(role) &&
+             ('email_verified' in request.auth.token) &&
+             request.auth.token.email_verified == true &&
+             ('email' in request.auth.token) &&
+             request.auth.token.email is string &&
+             exists(/databases/$(database)/documents/role_assignments/$(request.auth.token.email.lower())) &&
+             get(/databases/$(database)/documents/role_assignments/$(request.auth.token.email.lower())).data.role == role;
+    }
+
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.role is string && isValidUserRoleField(data.role) &&
+             data.active is bool &&
+             (!('approvalStatus' in data) || (data.approvalStatus is string && isValidApprovalStatus(data.approvalStatus))) &&
+             (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() <= 300)) &&
+             (!('approvedByUid' in data) || (data.approvedByUid is string && data.approvedByUid.size() >= 1 && data.approvedByUid.size() <= 128)) &&
+             (!('department' in data) || (data.department is string && data.department.size() <= 80)) &&
+             (data.role != 'PENDING' || data.active == false) &&
+             (!('approvalStatus' in data) || data.approvalStatus == 'APPROVED' || data.active == false) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidRoleAssignment(data) {
+      return data.email is string && isValidEmailId(data.email) &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             data.role is string && isValidAssignedRole(data.role) &&
+             data.assignedByUid is string && data.assignedByUid.size() >= 1 && data.assignedByUid.size() <= 128 &&
+             (!('department' in data) || (data.department is string && data.department.size() <= 80)) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidTicket(data) {
+      return data.ticketCode is string && data.ticketCode.size() >= 3 && data.ticketCode.size() <= 20 &&
+             data.title is string && data.title.size() >= 3 && data.title.size() <= 120 &&
+             data.description is string && data.description.size() >= 5 && data.description.size() <= 2000 &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+             data.priority is string && isValidPriority(data.priority) &&
+             data.status is string && isValidStatus(data.status) &&
+             data.creatorUid is string && data.creatorUid.size() >= 1 && data.creatorUid.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 100 &&
+             data.creatorEmail is string && data.creatorEmail.size() >= 3 && data.creatorEmail.size() <= 150 &&
+             (!('assigneeUid' in data) || (data.assigneeUid is string && data.assigneeUid.size() >= 1 && data.assigneeUid.size() <= 128)) &&
+             (!('assigneeName' in data) || (data.assigneeName is string && data.assigneeName.size() >= 1 && data.assigneeName.size() <= 100)) &&
+             (!('teamLeadUid' in data) || (data.teamLeadUid is string && data.teamLeadUid.size() >= 1 && data.teamLeadUid.size() <= 128)) &&
+             (!('defectPhotoBase64' in data) || (data.defectPhotoBase64 is string && data.defectPhotoBase64.size() <= 300000)) &&
+             (!('resolvedPhotoBase64' in data) || (data.resolvedPhotoBase64 is string && data.resolvedPhotoBase64.size() <= 300000)) &&
+             (!('resolutionNote' in data) || (data.resolutionNote is string && data.resolutionNote.size() <= 1000)) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             (!('completedAt' in data) || data.completedAt is timestamp);
+    }
+
+    function isValidNotification(data) {
+      return data.recipientUid is string && data.recipientUid.size() >= 1 && data.recipientUid.size() <= 128 &&
+             data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.ticketId is string && isValidId(data.ticketId) &&
+             data.ticketCode is string && data.ticketCode.size() >= 3 && data.ticketCode.size() <= 20 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
+             data.newStatus is string && isValidStatus(data.newStatus) &&
+             data.readFlag is bool &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+             (!('sku' in data) || (data.sku is string && data.sku.size() <= 40)) &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 30 &&
+             data.unitPrice is number && data.unitPrice >= 0 && data.unitPrice <= 1000000000 &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 300)) &&
+             data.active is bool &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidInventory(data) {
+      return data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+             (!('sku' in data) || (data.sku is string && data.sku.size() <= 40)) &&
+             (!('productId' in data) || (data.productId is string && data.productId.size() >= 1 && data.productId.size() <= 128)) &&
+             data.category is string && data.category.size() >= 2 && data.category.size() <= 60 &&
+             data.unit is string && data.unit.size() >= 1 && data.unit.size() <= 30 &&
+             data.unitPrice is number && data.unitPrice >= 0 && data.unitPrice <= 1000000000 &&
+             data.quantityOnHand is number && data.quantityOnHand >= 0 && data.quantityOnHand <= 1000000 &&
+             data.minThreshold is number && data.minThreshold >= 0 && data.minThreshold <= 100000 &&
+             (!('location' in data) || (data.location is string && data.location.size() <= 80)) &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 300)) &&
+             data.active is bool &&
+             data.updatedByUid is string && data.updatedByUid.size() >= 1 && data.updatedByUid.size() <= 128 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    function ticketExists(tid) {
+      return exists(/databases/$(database)/documents/tickets/$(tid));
+    }
+
+    function ticketData(tid) {
+      return get(/databases/$(database)/documents/tickets/$(tid)).data;
+    }
+
+    function canReadTicketInvoice(tid) {
+      return isTeamLeadOrAdmin() ||
+             (ticketExists(tid) && (
+               ticketData(tid).creatorUid == request.auth.uid ||
+               ('assigneeUid' in ticketData(tid) && ticketData(tid).assigneeUid == request.auth.uid && isTechnician())
+             ));
+    }
+
+    function canWriteTicketInvoice(tid) {
+      return ticketExists(tid) && (
+        isTeamLeadOrAdmin() ||
+        (isTechnician() && 'assigneeUid' in ticketData(tid) && ticketData(tid).assigneeUid == request.auth.uid)
+      );
+    }
+
+    function isValidInvoice(data, invoiceId) {
+      return data.invoiceCode is string && data.invoiceCode.size() >= 3 && data.invoiceCode.size() <= 24 &&
+             data.ticketId is string && data.ticketId == invoiceId &&
+             data.ticketCode is string && data.ticketCode.size() >= 3 && data.ticketCode.size() <= 20 &&
+             data.creatorUid is string && data.creatorUid.size() >= 1 && data.creatorUid.size() <= 128 &&
+             (!('assigneeUid' in data) || (data.assigneeUid is string && data.assigneeUid.size() >= 1 && data.assigneeUid.size() <= 128)) &&
+             data.items is list && data.items.size() <= 50 &&
+             (data.items.size() == 0 || (data.items[0] is map && data.items[0].name is string && data.items[0].quantity is number && data.items[0].quantity >= 1)) &&
+             data.partsSubtotal is number && data.partsSubtotal >= 0 && data.partsSubtotal <= 10000000000 &&
+             data.laborFee is number && data.laborFee >= 0 && data.laborFee <= 10000000000 &&
+             data.totalAmount is number && data.totalAmount >= 0 && data.totalAmount <= 20000000000 &&
+             data.paymentStatus in ['UNPAID', 'PAID'] &&
+             data.paymentMethod in ['CASH', 'TRANSFER', 'INTERNAL'] &&
+             (!('note' in data) || (data.note is string && data.note.size() <= 500)) &&
+             data.updatedByUid is string && data.updatedByUid.size() >= 1 && data.updatedByUid.size() <= 128 &&
+             data.updatedByName is string && data.updatedByName.size() >= 1 && data.updatedByName.size() <= 100 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             (!('paidAt' in data) || data.paidAt is timestamp);
+    }
+
+    // 1. User accounts & RBAC profiles
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isTeamLeadOrAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isTeamLeadOrAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUser(incoming()) &&
+                       incoming().keys().hasAll(['uid', 'email', 'displayName', 'role', 'active', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['uid', 'email', 'displayName', 'role', 'active', 'approvalStatus', 'rejectionReason', 'approvedByUid', 'department', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt <= request.time &&
+                       (
+                         (
+                           isAdmin() &&
+                           !isRootAdminEmailValue(incoming().email) &&
+                           (incoming().role != 'ADMIN' || isBootstrapAdminEmail())
+                         ) ||
+                         (
+                           request.auth.uid == userId &&
+                           incoming().uid == userId &&
+                           (
+                             (
+                               incoming().role == 'PENDING' &&
+                               incoming().active == false &&
+                               ('approvalStatus' in incoming()) &&
+                               incoming().approvalStatus == 'PENDING' &&
+                               !('rejectionReason' in incoming()) &&
+                               !('approvedByUid' in incoming())
+                             ) ||
+                             (
+                               isBootstrapAdminEmail() &&
+                               incoming().role == 'ADMIN' &&
+                               incoming().active == true &&
+                               (!('approvalStatus' in incoming()) || incoming().approvalStatus == 'APPROVED')
+                             ) ||
+                             (
+                               hasMatchingRoleAssignment(incoming().role) &&
+                               incoming().active == true &&
+                               (!('approvalStatus' in incoming()) || incoming().approvalStatus == 'APPROVED')
+                             )
+                           )
+                         )
+                       );
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUser(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().email == existing().email &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().keys().hasOnly(['uid', 'email', 'displayName', 'role', 'active', 'approvalStatus', 'rejectionReason', 'approvedByUid', 'department', 'createdAt', 'updatedAt']) &&
+                       (
+                         isBootstrapAdminEmail() ||
+                         (
+                           isAdmin() &&
+                           !isRootAdminEmailValue(existing().email) &&
+                           existing().role != 'ADMIN' &&
+                           incoming().role != 'ADMIN'
+                         ) ||
+                         (
+                           request.auth.uid == userId &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'updatedAt'])
+                         ) ||
+                         (
+                           request.auth.uid == userId &&
+                           (!('approvalStatus' in existing()) || existing().approvalStatus != 'REJECTED') &&
+                           hasMatchingRoleAssignment(incoming().role) &&
+                           incoming().active == true &&
+                           (!('approvalStatus' in incoming()) || incoming().approvalStatus == 'APPROVED') &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['role', 'active', 'approvalStatus', 'displayName', 'department', 'updatedAt'])
+                         ) ||
+                         (
+                           request.auth.uid == userId &&
+                           isBootstrapAdminEmail() &&
+                           incoming().role == 'ADMIN' &&
+                           incoming().active == true &&
+                           (!('approvalStatus' in incoming()) || incoming().approvalStatus == 'APPROVED') &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['role', 'active', 'approvalStatus', 'displayName', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isAdmin() &&
+                       isValidId(userId) &&
+                       request.auth.uid != userId &&
+                       !isRootAdminEmailValue(existing().email) &&
+                       (isBootstrapAdminEmail() || existing().role != 'ADMIN');
+    }
+
+    // 2. Admin-managed role assignments by lowercased Google email
+    match /role_assignments/{emailId} {
+      allow get: if isSignedIn() &&
+                    isValidEmailId(emailId) &&
+                    (isAdmin() || (('email_verified' in request.auth.token) && request.auth.token.email_verified == true && ('email' in request.auth.token) && request.auth.token.email is string && request.auth.token.email.lower() == emailId));
+      allow list: if isAdmin();
+
+      allow create: if isAdmin() &&
+                       isValidEmailId(emailId) &&
+                       !isRootAdminEmailValue(emailId) &&
+                       isValidRoleAssignment(incoming()) &&
+                       incoming().email == emailId &&
+                       incoming().assignedByUid == request.auth.uid &&
+                       (incoming().role != 'ADMIN' || isBootstrapAdminEmail()) &&
+                       incoming().keys().hasAll(['email', 'displayName', 'role', 'assignedByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['email', 'displayName', 'role', 'department', 'assignedByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt <= request.time;
+
+      allow update: if isAdmin() &&
+                       isValidEmailId(emailId) &&
+                       !isRootAdminEmailValue(emailId) &&
+                       isValidRoleAssignment(incoming()) &&
+                       incoming().email == existing().email &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().assignedByUid == request.auth.uid &&
+                       (incoming().role != 'ADMIN' || isBootstrapAdminEmail()) &&
+                       (existing().role != 'ADMIN' || isBootstrapAdminEmail()) &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'role', 'department', 'assignedByUid', 'updatedAt']);
+
+      allow delete: if isAdmin() &&
+                       isValidEmailId(emailId) &&
+                       !isRootAdminEmailValue(emailId) &&
+                       (existing().role != 'ADMIN' || isBootstrapAdminEmail());
+    }
+
+    // 3. Support Tickets with 4-stage sequential lifecycle, terminal lock & Lead/Admin deletion
+    match /tickets/{ticketId} {
+      allow get: if isApprovedActiveUser() &&
+                    isValidId(ticketId) &&
+                    (
+                      isTeamLeadOrAdmin() ||
+                      existing().creatorUid == request.auth.uid ||
+                      ('assigneeUid' in existing() && existing().assigneeUid == request.auth.uid && isTechnician())
+                    );
+
+      allow list: if isApprovedActiveUser() &&
+                     (
+                       isTeamLeadOrAdmin() ||
+                       resource.data.creatorUid == request.auth.uid ||
+                       ('assigneeUid' in resource.data && resource.data.assigneeUid == request.auth.uid)
+                     );
+
+      allow create: if isApprovedActiveUser() &&
+                       isValidId(ticketId) &&
+                       isValidTicket(incoming()) &&
+                       incoming().creatorUid == request.auth.uid &&
+                       incoming().status == 'OPEN' &&
+                       incoming().keys().hasAll(['ticketCode', 'title', 'description', 'category', 'priority', 'status', 'creatorUid', 'creatorName', 'creatorEmail', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['ticketCode', 'title', 'description', 'category', 'priority', 'status', 'creatorUid', 'creatorName', 'creatorEmail', 'defectPhotoBase64', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt <= request.time;
+
+      function canUserDocUpdateTicket(u) {
+        return isApprovedUserDoc(u) && (
+          u.role == 'ADMIN' ||
+          (
+            existing().status != 'COMPLETED' &&
+            (
+              (
+                u.role == 'TEAM_LEAD' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['assigneeUid', 'assigneeName', 'teamLeadUid', 'priority', 'status', 'updatedAt']) &&
+                incoming().status in ['OPEN', 'ACCEPTED', 'IN_PROGRESS'] &&
+                (existing().status == 'OPEN' ? incoming().status in ['OPEN', 'ACCEPTED'] : incoming().status == existing().status)
+              ) ||
+              (
+                u.role in ['TECHNICIAN', 'TEAM_LEAD'] &&
+                'assigneeUid' in existing() &&
+                existing().assigneeUid == request.auth.uid &&
+                (
+                  (
+                    existing().status == 'ACCEPTED' &&
+                    incoming().status == 'IN_PROGRESS' &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolutionNote', 'updatedAt'])
+                  ) ||
+                  (
+                    existing().status == 'IN_PROGRESS' &&
+                    incoming().status == 'COMPLETED' &&
+                    ('resolvedPhotoBase64' in incoming()) &&
+                    incoming().resolvedPhotoBase64 is string &&
+                    incoming().resolvedPhotoBase64.size() >= 10 &&
+                    ('completedAt' in incoming()) &&
+                    incoming().completedAt <= request.time &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'resolvedPhotoBase64', 'resolutionNote', 'completedAt', 'updatedAt'])
+                  ) ||
+                  (
+                    existing().status == 'IN_PROGRESS' &&
+                    incoming().status == 'IN_PROGRESS' &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['resolutionNote', 'resolvedPhotoBase64', 'updatedAt'])
+                  )
+                )
+              ) ||
+              (
+                existing().creatorUid == request.auth.uid &&
+                existing().status == 'OPEN' &&
+                incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'category', 'priority', 'defectPhotoBase64', 'updatedAt'])
+              )
+            )
+          )
+        );
+      }
+
+      allow update: if isSignedIn() &&
+                       isValidId(ticketId) &&
+                       isValidTicket(incoming()) &&
+                       incoming().creatorUid == existing().creatorUid &&
+                       incoming().creatorName == existing().creatorName &&
+                       incoming().creatorEmail == existing().creatorEmail &&
+                       incoming().ticketCode == existing().ticketCode &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt <= request.time &&
+                       (
+                         isBootstrapAdminEmail() ||
+                         (userDocExists(request.auth.uid) && canUserDocUpdateTicket(userDoc(request.auth.uid)))
+                       );
+
+      allow delete: if isTeamLeadOrAdmin() && isValidId(ticketId);
+    }
+
+    // 4. Real-time notifications scoped by recipientUid
+    match /notifications/{notificationId} {
+      allow get: if isApprovedActiveUser() && isValidId(notificationId) && existing().recipientUid == request.auth.uid;
+      allow list: if isApprovedActiveUser() && resource.data.recipientUid == request.auth.uid;
+
+      allow create: if isApprovedActiveUser() &&
+                       isValidId(notificationId) &&
+                       isValidNotification(incoming()) &&
+                       incoming().senderUid == request.auth.uid &&
+                       incoming().readFlag == false &&
+                       incoming().keys().hasAll(['recipientUid', 'senderUid', 'ticketId', 'ticketCode', 'title', 'message', 'newStatus', 'readFlag', 'createdAt']) &&
+                       incoming().keys().hasOnly(['recipientUid', 'senderUid', 'ticketId', 'ticketCode', 'title', 'message', 'newStatus', 'readFlag', 'createdAt']) &&
+                       incoming().createdAt <= request.time &&
+                       exists(/databases/$(database)/documents/tickets/$(incoming().ticketId));
+
+      allow update: if isApprovedActiveUser() &&
+                       isValidId(notificationId) &&
+                       isValidNotification(incoming()) &&
+                       existing().recipientUid == request.auth.uid &&
+                       incoming().recipientUid == existing().recipientUid &&
+                       incoming().senderUid == existing().senderUid &&
+                       incoming().ticketId == existing().ticketId &&
+                       incoming().ticketCode == existing().ticketCode &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['readFlag']) &&
+                       incoming().readFlag == true;
+
+      allow delete: if isApprovedActiveUser() && isValidId(notificationId) && existing().recipientUid == request.auth.uid;
+    }
+
+    // 5. Shared replacement parts & repair services catalog
+    match /products/{productId} {
+      allow get: if isStaffRole() && isValidId(productId);
+      allow list: if isTeamLeadOrAdmin() || (isTechnician() && resource.data.active == true);
+
+      allow create: if isTeamLeadOrAdmin() &&
+                       isValidId(productId) &&
+                       isValidProduct(incoming()) &&
+                       incoming().createdByUid == request.auth.uid &&
+                       incoming().keys().hasAll(['name', 'category', 'unit', 'unitPrice', 'active', 'createdByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'sku', 'category', 'unit', 'unitPrice', 'note', 'active', 'createdByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt <= request.time;
+
+      allow update: if isTeamLeadOrAdmin() &&
+                       isValidId(productId) &&
+                       isValidProduct(incoming()) &&
+                       incoming().createdByUid == existing().createdByUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt <= request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'sku', 'category', 'unit', 'unitPrice', 'note', 'active', 'updatedAt']);
+
+      allow delete: if isTeamLeadOrAdmin() && isValidId(productId);
+    }
+
+    // 6. Ticket repair invoices (1:1 keyed by ticketId)
+    match /invoices/{invoiceId} {
+      allow get: if isApprovedActiveUser() && isValidId(invoiceId) && canReadTicketInvoice(invoiceId);
+      allow list: if isApprovedActiveUser() && (
+                       isTeamLeadOrAdmin() ||
+                       resource.data.creatorUid == request.auth.uid ||
+                       ('assigneeUid' in resource.data && resource.data.assigneeUid == request.auth.uid)
+                     );
+
+      allow create: if isApprovedActiveUser() &&
+                       isValidId(invoiceId) &&
+                       isValidInvoice(incoming(), invoiceId) &&
+                       canWriteTicketInvoice(invoiceId) &&
+                       incoming().creatorUid == ticketData(invoiceId).creatorUid &&
+                       incoming().updatedByUid == request.auth.uid &&
+                       incoming().keys().hasAll(['invoiceCode', 'ticketId', 'ticketCode', 'creatorUid', 'items', 'partsSubtotal', 'laborFee', 'totalAmount', 'paymentStatus', 'paymentMethod', 'updatedByUid', 'updatedByName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['invoiceCode', 'ticketId', 'ticketCode', 'creatorUid', 'assigneeUid', 'items', 'partsSubtotal', 'laborFee', 'totalAmount', 'paymentStatus', 'paymentMethod', 'note', 'updatedByUid', 'updatedByName', 'createdAt', 'updatedAt', 'paidAt']) &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt <= request.time &&
+                       (!('paidAt' in incoming()) || incoming().paidAt <= request.time);
+
+      allow update: if isApprovedActiveUser() &&
+                       isValidId(invoiceId) &&
+                       isValidInvoice(incoming(), invoiceId) &&
+                       canWriteTicketInvoice(invoiceId) &&
+                       incoming().invoiceCode == existing().invoiceCode &&
+                       incoming().ticketId == existing().ticketId &&
+                       incoming().ticketCode == existing().ticketCode &&
+                       incoming().creatorUid == existing().creatorUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedByUid == request.auth.uid &&
+                       incoming().updatedAt <= request.time &&
+                       (!('paidAt' in incoming()) || incoming().paidAt <= request.time) &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['assigneeUid', 'items', 'partsSubtotal', 'laborFee', 'totalAmount', 'paymentStatus', 'paymentMethod', 'note', 'updatedByUid', 'updatedByName', 'updatedAt', 'paidAt']);
+
+      allow delete: if isTeamLeadOrAdmin() && isValidId(invoiceId);
+    }
+
+    // 7. Physical spare parts inventory with stock levels & invoice deduction support
+    match /inventory/{inventoryId} {
+      allow get: if isStaffRole() && isValidId(inventoryId);
+      allow list: if isTeamLeadOrAdmin() || (isTechnician() && resource.data.active == true);
+
+      allow create: if isTeamLeadOrAdmin() &&
+                       isValidId(inventoryId) &&
+                       isValidInventory(incoming()) &&
+                       incoming().updatedByUid == request.auth.uid &&
+                       incoming().keys().hasAll(['name', 'category', 'unit', 'unitPrice', 'quantityOnHand', 'minThreshold', 'active', 'updatedByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['name', 'sku', 'productId', 'category', 'unit', 'unitPrice', 'quantityOnHand', 'minThreshold', 'location', 'note', 'active', 'updatedByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().createdAt <= request.time &&
+                       incoming().updatedAt <= request.time;
+
+      allow update: if isSignedIn() &&
+                       isValidId(inventoryId) &&
+                       isValidInventory(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedByUid == request.auth.uid &&
+                       incoming().updatedAt <= request.time &&
+                       (
+                         (
+                           isTeamLeadOrAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'sku', 'productId', 'category', 'unit', 'unitPrice', 'quantityOnHand', 'minThreshold', 'location', 'note', 'active', 'updatedByUid', 'updatedAt'])
+                         ) ||
+                         (
+                           isTechnician() &&
+                           existing().active == true &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['quantityOnHand', 'updatedByUid', 'updatedAt']) &&
+                           incoming().quantityOnHand <= existing().quantityOnHand
+                         )
+                       );
+
+      allow delete: if isTeamLeadOrAdmin() && isValidId(inventoryId);
+    }
+  }
+}

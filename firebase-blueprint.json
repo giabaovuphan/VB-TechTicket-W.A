@@ -1,0 +1,505 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated user profile with Admin-only RBAC role assignment and approval status.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID matching the document ID."
+        },
+        "email": {
+          "type": "string",
+          "description": "Verified Google account email address (lowercased)."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["PENDING", "USER", "TECHNICIAN", "TEAM_LEAD", "ADMIN"],
+          "description": "Assigned role governing app capabilities; PENDING until approved by an Admin."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the account is active."
+        },
+        "approvalStatus": {
+          "type": "string",
+          "enum": ["PENDING", "APPROVED", "REJECTED"],
+          "description": "Admin approval workflow status for Google-created accounts."
+        },
+        "rejectionReason": {
+          "type": "string",
+          "description": "Optional reason provided when an Admin rejects an access request."
+        },
+        "approvedByUid": {
+          "type": "string",
+          "description": "Optional UID of the Admin who approved or rejected the account."
+        },
+        "department": {
+          "type": "string",
+          "description": "Optional team or department label."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of account creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["uid", "email", "displayName", "role", "active", "createdAt", "updatedAt"]
+    },
+    "RoleAssignment": {
+      "title": "RoleAssignment",
+      "description": "Admin-managed role assignment keyed by lowercased Google email.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Target user Google email (lowercased, matches document ID)."
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Assigned display name for the staff/user."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["USER", "TECHNICIAN", "TEAM_LEAD", "ADMIN"],
+          "description": "Role granted by Admin."
+        },
+        "department": {
+          "type": "string",
+          "description": "Optional department or specialty."
+        },
+        "assignedByUid": {
+          "type": "string",
+          "description": "UID of the Admin who created or updated this assignment."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["email", "displayName", "role", "assignedByUid", "createdAt", "updatedAt"]
+    },
+    "SupportTicket": {
+      "title": "SupportTicket",
+      "description": "Technical support repair ticket with 4-stage lifecycle and before/after photo proof.",
+      "type": "object",
+      "properties": {
+        "ticketCode": {
+          "type": "string",
+          "description": "Human-readable ticket code (e.g. TK-4821)."
+        },
+        "title": {
+          "type": "string",
+          "description": "Short summary of the hardware or software issue."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the defect."
+        },
+        "category": {
+          "type": "string",
+          "description": "Device or support category."
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH", "URGENT"],
+          "description": "Ticket priority level."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["OPEN", "ACCEPTED", "IN_PROGRESS", "COMPLETED"],
+          "description": "Sequential ticket workflow status."
+        },
+        "creatorUid": {
+          "type": "string",
+          "description": "UID of the user who submitted the ticket."
+        },
+        "creatorName": {
+          "type": "string",
+          "description": "Display name of the ticket creator."
+        },
+        "creatorEmail": {
+          "type": "string",
+          "description": "Email of the ticket creator."
+        },
+        "assigneeUid": {
+          "type": "string",
+          "description": "Optional UID of the assigned technician."
+        },
+        "assigneeName": {
+          "type": "string",
+          "description": "Optional display name of the assigned technician."
+        },
+        "teamLeadUid": {
+          "type": "string",
+          "description": "Optional UID of the Team Lead who assigned the ticket."
+        },
+        "defectPhotoBase64": {
+          "type": "string",
+          "description": "Optional compressed JPEG Base64 string of the product defect photo."
+        },
+        "resolvedPhotoBase64": {
+          "type": "string",
+          "description": "Optional compressed JPEG Base64 string of the post-repair verification photo."
+        },
+        "resolutionNote": {
+          "type": "string",
+          "description": "Optional technician repair summary note."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last status or field update (FieldValue.serverTimestamp())."
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional server timestamp when ticket reached COMPLETED."
+        }
+      },
+      "required": [
+        "ticketCode",
+        "title",
+        "description",
+        "category",
+        "priority",
+        "status",
+        "creatorUid",
+        "creatorName",
+        "creatorEmail",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "TicketNotification": {
+      "title": "TicketNotification",
+      "description": "Real-time notification event triggered on ticket assignment, status, or invoice changes.",
+      "type": "object",
+      "properties": {
+        "recipientUid": {
+          "type": "string",
+          "description": "UID of the user who should receive this notification."
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "UID of the user whose action triggered this notification."
+        },
+        "ticketId": {
+          "type": "string",
+          "description": "Document ID of the related ticket."
+        },
+        "ticketCode": {
+          "type": "string",
+          "description": "Display code of the related ticket."
+        },
+        "title": {
+          "type": "string",
+          "description": "Notification title in Vietnamese."
+        },
+        "message": {
+          "type": "string",
+          "description": "Notification body message in Vietnamese."
+        },
+        "newStatus": {
+          "type": "string",
+          "enum": ["OPEN", "ACCEPTED", "IN_PROGRESS", "COMPLETED"],
+          "description": "Ticket status associated with this notification."
+        },
+        "readFlag": {
+          "type": "boolean",
+          "description": "Whether the recipient has read this notification."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "recipientUid",
+        "senderUid",
+        "ticketId",
+        "ticketCode",
+        "title",
+        "message",
+        "newStatus",
+        "readFlag",
+        "createdAt"
+      ]
+    },
+    "ProductItem": {
+      "title": "ProductItem",
+      "description": "Shared catalog item for replacement parts and repair services managed by Team Leads and Admins.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the replacement part or service."
+        },
+        "sku": {
+          "type": "string",
+          "description": "Optional part code or SKU."
+        },
+        "category": {
+          "type": "string",
+          "description": "Hardware/service category."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measurement (e.g. Cái, Bộ, Thanh)."
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "Standard unit price in VND."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional warranty or stock specification note."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether this item is currently selectable for new invoices."
+        },
+        "createdByUid": {
+          "type": "string",
+          "description": "UID of the Team Lead or Admin who created the item."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": ["name", "category", "unit", "unitPrice", "active", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "RepairInvoice": {
+      "title": "RepairInvoice",
+      "description": "Repair billing invoice attached 1:1 to a support ticket with parts line items, labor fee, and payment tracking.",
+      "type": "object",
+      "properties": {
+        "invoiceCode": {
+          "type": "string",
+          "description": "Human-readable invoice code (e.g. HD-4821)."
+        },
+        "ticketId": {
+          "type": "string",
+          "description": "Document ID of the associated support ticket (matches invoice document ID)."
+        },
+        "ticketCode": {
+          "type": "string",
+          "description": "Human-readable code of the associated support ticket."
+        },
+        "creatorUid": {
+          "type": "string",
+          "description": "UID of the ticket creator for transparent cost viewing."
+        },
+        "assigneeUid": {
+          "type": "string",
+          "description": "Optional UID of the assigned technician."
+        },
+        "items": {
+          "type": "array",
+          "description": "Snapshot list of up to 50 replacement part or service line items."
+        },
+        "partsSubtotal": {
+          "type": "number",
+          "description": "Sum of line item totals in VND."
+        },
+        "laborFee": {
+          "type": "number",
+          "description": "Repair service labor fee in VND."
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Grand total (partsSubtotal + laborFee) in VND."
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["UNPAID", "PAID"],
+          "description": "Payment completion status."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["CASH", "TRANSFER", "INTERNAL"],
+          "description": "Payment settlement method."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional billing or warranty note."
+        },
+        "updatedByUid": {
+          "type": "string",
+          "description": "UID of the staff member who created or last updated the invoice."
+        },
+        "updatedByName": {
+          "type": "string",
+          "description": "Display name of the staff member who last updated the invoice."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of invoice creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last invoice update."
+        },
+        "paidAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional server timestamp when marked as PAID."
+        }
+      },
+      "required": [
+        "invoiceCode",
+        "ticketId",
+        "ticketCode",
+        "creatorUid",
+        "items",
+        "partsSubtotal",
+        "laborFee",
+        "totalAmount",
+        "paymentStatus",
+        "paymentMethod",
+        "updatedByUid",
+        "updatedByName",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Physical spare parts and supplies inventory record with on-hand stock, low-stock alert threshold, and invoice deduction tracking.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Display name of the spare part or supply item."
+        },
+        "sku": {
+          "type": "string",
+          "description": "Optional inventory SKU or barcode."
+        },
+        "productId": {
+          "type": "string",
+          "description": "Optional linked catalog document ID in /products."
+        },
+        "category": {
+          "type": "string",
+          "description": "Hardware or support category."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Unit of measurement (e.g. Cái, Bộ, Thanh)."
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "Standard unit price in VND."
+        },
+        "quantityOnHand": {
+          "type": "number",
+          "description": "Current available stock count (>= 0)."
+        },
+        "minThreshold": {
+          "type": "number",
+          "description": "Low-stock warning threshold (>= 0)."
+        },
+        "location": {
+          "type": "string",
+          "description": "Optional warehouse shelf or storage location."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional technical or warranty note."
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether this inventory item is active for issuance."
+        },
+        "updatedByUid": {
+          "type": "string",
+          "description": "UID of the staff member who created or last updated the stock level."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last stock or field update (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "name",
+        "category",
+        "unit",
+        "unitPrice",
+        "quantityOnHand",
+        "minThreshold",
+        "active",
+        "updatedByUid",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Authenticated user profiles with Admin-controlled RBAC roles."
+    },
+    "/role_assignments/{emailId}": {
+      "schema": { "$ref": "#/entities/RoleAssignment" },
+      "description": "Admin-managed role invitations and assignments keyed by lowercased Google email."
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/SupportTicket" },
+      "description": "Support tickets tracked across 4 sequential states with defect and resolution photos."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/TicketNotification" },
+      "description": "Real-time push notification records scoped to recipientUid."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/ProductItem" },
+      "description": "Shared replacement parts and repair services catalog managed by Team Leads and Admins."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/RepairInvoice" },
+      "description": "Repair invoices keyed by ticketId with itemized replacement parts, labor fees, and payment status."
+    },
+    "/inventory/{inventoryId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Spare parts inventory tracking stock quantities, low-stock thresholds, and automatic invoice deductions."
+    }
+  }
+}

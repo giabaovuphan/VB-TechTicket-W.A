@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">HCN Support</string>
+    <string name="app_tagline">Quản lý ticket hỗ trợ kỹ thuật</string>
+    <string name="sign_in_with_google">Đăng nhập với Google</string>
+    <string name="sign_out">Đăng xuất</string>
+    <string name="nav_tickets">Tickets</string>
+    <string name="nav_products">Linh kiện</string>
+    <string name="nav_notifications">Thông báo</string>
+    <string name="nav_reports">Báo cáo</string>
+    <string name="nav_admin">Phân quyền</string>
+    <string name="create_ticket">Tạo Ticket</string>
+    <string name="notification_channel_name">Cập nhật trạng thái Ticket</string>
+    <string name="notification_channel_desc">Thông báo thời gian thực khi ticket được tiếp nhận, xử lý hoặc hoàn thành.</string>
+</resources>
